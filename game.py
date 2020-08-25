@@ -4,6 +4,24 @@ from math import sin, radians, degrees, copysign
 import pygame
 from pygame.math import Vector2
 
+import math
+
+GREEN = (  0, 255,   0)
+
+class Circuit:
+    def __init__(self):
+        # list of waypoints in the circuit (in order)
+        self.waypoints = []
+
+        # embed the image of waypoint in circuit class
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        image_path = os.path.join(current_dir, "waypoint.png")
+        self.image = pygame.image.load(image_path)
+
+    def addWaypoint(self, x, y):
+        waypoint = Vector2(x, y)
+        self.waypoints.append(waypoint)
+
 
 class Drone:
     def __init__(self, x, y, angle=0.0, mass=2.0, max_force=100.0):
@@ -13,9 +31,14 @@ class Drone:
         self.mass = mass
         self.max_force = max_force
 
-        self.int_error = 0.0
+        # embed the image of drone in class
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        image_path = os.path.join(current_dir, "quad_top_small.png")
+        self.image = pygame.image.load(image_path)
 
+        self.int_error = 0.0
         self.position_ref = self.position
+        self.next_waypoint = 0
 
     def update(self, dt):
         # basic position controller
@@ -55,14 +78,14 @@ class Game:
         self.exit = False
 
     def run(self):
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        image_path = os.path.join(current_dir, "quad_top_small.png")
-        drone_image = pygame.image.load(image_path)
-
-        image_path = os.path.join(current_dir, "waypoint.jpg")
-        waypoint_image = pygame.image.load(image_path)
-
+        # Create drone instance
         drone = Drone(640, 360)
+
+        # Create circuit and add waypoints
+        circuit1 = Circuit()
+        circuit1.addWaypoint(500, 100)
+        circuit1.addWaypoint(50, 250)
+        circuit1.addWaypoint(1000, 600)
 
         while not self.exit:
             dt = self.clock.get_time() / 1000
@@ -89,27 +112,35 @@ class Game:
             drone.update(dt)
 
             # Drone logic goes here
-            point = Vector2(500, 20)
-            drone.position_ref = point
-
+            drone.position_ref = circuit1.waypoints[drone.next_waypoint]
+            error = drone.position_ref - drone.position
+            error_size = math.sqrt(error.x*error.x + error.y*error.y)
+            if error_size < 2:
+                drone.next_waypoint += 1
+                if drone.next_waypoint >= len(circuit1.waypoints):
+                    drone.next_waypoint = 0
+            
             # Drawing
             self.screen.fill((255, 255, 255))
 
-            rect = drone_image.get_rect()
-            self.screen.blit(drone_image, drone.position -
-                             (rect.width / 2, rect.height / 2))
+            # display the circuit
+            for waypoint in circuit1.waypoints:
+                rect = circuit1.image.get_rect()
+                self.screen.blit(circuit1.image, waypoint- (rect.width / 2, rect.height))
+                pygame.draw.circle(self.screen, GREEN, [int(waypoint.x),int(waypoint.y)], 5)
 
-            # waypoint 1
-            point = Vector2(500, 20)
-            self.screen.blit(waypoint_image, point)
+            # display the drone position
+            rect = drone.image.get_rect()            
+            self.screen.blit(drone.image, drone.position - (rect.width / 2, rect.height / 2))
 
-            # waypoint 2
-            point = Vector2(20, 50)
-            self.screen.blit(waypoint_image, point)
-
-            # waypoint 3
-            point = Vector2(1000, 600)
-            self.screen.blit(waypoint_image, point)
+            # display some usefull data on screen
+            textWriter = pygame.font.SysFont('Arial', 15)
+            text = textWriter.render("Position: [" + str.format('{0:.2f}',drone.position.x) + ", " + str.format('{0:.2f}',drone.position.y)+"]", 1, GREEN)
+            self.screen.blit(text, (1100, 600))
+            text = textWriter.render("Velocity: [" + str.format('{0:.2f}',drone.velocity.x) + ", " + str.format('{0:.2f}',drone.velocity.y)+"]", 1, GREEN)
+            self.screen.blit(text, (1100, 600 + textWriter.get_linesize()))
+            text = textWriter.render("Next Waypoint: Waypoint " + str(drone.next_waypoint), 1, GREEN)
+            self.screen.blit(text, (1100, 600 + 2*textWriter.get_linesize()))
 
             pygame.display.flip()
 
